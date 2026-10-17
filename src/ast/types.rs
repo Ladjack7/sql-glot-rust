@@ -1597,6 +1597,10 @@ pub enum BinaryOperator {
     Arrow,
     /// `->>` JSON text access
     DoubleArrow,
+    /// `#>` JSON path access operator
+    HashArrow,
+    /// `#>>` JSON path text access operator
+    HashDoubleArrow,
     /// `@>` PostgreSQL "contains" (arrays / jsonb / range)
     AtArrow,
     /// `<@` PostgreSQL "is contained by"

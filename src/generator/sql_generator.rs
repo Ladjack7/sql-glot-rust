@@ -1904,6 +1904,8 @@ impl Generator {
             BinaryOperator::ShiftRight => " >> ",
             BinaryOperator::Arrow => " -> ",
             BinaryOperator::DoubleArrow => " ->> ",
+            BinaryOperator::HashArrow => " #> ",
+            BinaryOperator::HashDoubleArrow => " #>> ",
             BinaryOperator::AtArrow => " @> ",
             BinaryOperator::ArrowAt => " <@ ",
         }

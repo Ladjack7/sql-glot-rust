@@ -7642,6 +7642,34 @@ impl Parser {
                     path: Box::new(path),
                     as_text: true,
                 };
+            } else if self.match_token(TokenType::HashArrow) {
+                let mut path = self.parse_primary()?;
+                while self.match_token(TokenType::DoubleColon) {
+                    let data_type = self.parse_data_type()?;
+                    path = Expr::Cast {
+                        expr: Box::new(path),
+                        data_type,
+                    };
+                }
+                expr = Expr::BinaryOp {
+                    left: Box::new(expr),
+                    op: BinaryOperator::HashArrow,
+                    right: Box::new(path),
+                };
+            } else if self.match_token(TokenType::HashDoubleArrow) {
+                let mut path = self.parse_primary()?;
+                while self.match_token(TokenType::DoubleColon) {
+                    let data_type = self.parse_data_type()?;
+                    path = Expr::Cast {
+                        expr: Box::new(path),
+                        data_type,
+                    };
+                }
+                expr = Expr::BinaryOp {
+                    left: Box::new(expr),
+                    op: BinaryOperator::HashDoubleArrow,
+                    right: Box::new(path),
+                };
             } else if self.peek_type() == &TokenType::Colon
                 && self
                     .peek_offset(1)
@@ -10995,6 +11023,32 @@ mod tests {
         for sql in &cases {
             let stmt = Parser::new(sql).unwrap().parse_statement().unwrap();
             assert!(matches!(stmt, Statement::Select(_)));
+        }
+    }
+
+    #[test]
+    fn test_parse_postgres_json_hash_path_operators() {
+        for (sql, expected_pg) in [
+            (
+                "SELECT '{\"a\":{\"b\":\"c\"}}'::jsonb #>> '{a,b}'",
+                "SELECT '{\"a\":{\"b\":\"c\"}}'::JSONB #>> '{a,b}'",
+            ),
+            (
+                "SELECT '{\"a\":{\"b\":\"c\"}}'::jsonb #> '{a,b}'",
+                "SELECT '{\"a\":{\"b\":\"c\"}}'::JSONB #> '{a,b}'",
+            ),
+            (
+                "SELECT doc #>> '{a,0,b}'::text[] FROM items",
+                "SELECT doc #>> '{a,0,b}'::TEXT[] FROM items",
+            ),
+            (
+                "SELECT doc #> '{a}' #>> '{b,c}' FROM items",
+                "SELECT doc #> '{a}' #>> '{b,c}' FROM items",
+            ),
+        ] {
+            let stmt = crate::parse(sql, crate::Dialect::Postgres).expect(sql);
+            let out = crate::generate(&stmt, crate::Dialect::Postgres);
+            assert_eq!(out, expected_pg, "round-trip for {sql}");
         }
     }
 }
