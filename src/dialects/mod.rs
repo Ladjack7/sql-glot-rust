@@ -1505,8 +1505,12 @@ fn transform_expr(expr: Expr, target: Dialect) -> Expr {
                 escape,
             }
         }
-        // Map data types in CAST
+        // Map data types in CAST / TRY_CAST
         Expr::Cast { expr, data_type } => Expr::Cast {
+            expr: Box::new(transform_expr(*expr, target)),
+            data_type: map_data_type(data_type, target),
+        },
+        Expr::TryCast { expr, data_type } => Expr::TryCast {
             expr: Box::new(transform_expr(*expr, target)),
             data_type: map_data_type(data_type, target),
         },
@@ -2015,9 +2019,17 @@ fn transform_limit(sel: &mut SelectStatement, target: Dialect) {
             sel.fetch_first = Some(*top);
         }
     } else {
-        // All other dialects: normalize to LIMIT
+        // All other dialects: normalize to LIMIT (preserve TOP when PERCENT or WITH TIES is set)
         if let Some(top) = sel.top.take() {
-            if sel.limit.is_none() {
+            let has_top_modifier = matches!(
+                top.as_ref(),
+                Expr::Number(s)
+                    if s.to_ascii_uppercase().contains("PERCENT")
+                        || s.to_ascii_uppercase().contains("WITH TIES")
+            );
+            if has_top_modifier {
+                sel.top = Some(top);
+            } else if sel.limit.is_none() {
                 sel.limit = Some(*top);
             }
         }

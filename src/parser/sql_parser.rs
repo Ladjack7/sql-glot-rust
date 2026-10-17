@@ -1668,12 +1668,39 @@ impl Parser {
             }
         }
 
-        // TOP N (SQL Server style)
+        // TOP N [PERCENT] [WITH TIES] (SQL Server style)
         // Use parse_primary() instead of parse_expr() to prevent the parser
         // from consuming `*` (SELECT all columns) as a multiplication operator.
-        // This correctly handles: TOP 5, TOP 100, TOP (expr), TOP (@var)
+        // This correctly handles: TOP 5, TOP 100, TOP (expr), TOP (@var),
+        // TOP 1 PERCENT, TOP (1) PERCENT, TOP 10 WITH TIES.
         let top = if self.match_token(TokenType::Top) {
-            Some(Box::new(self.parse_primary()?))
+            let mut expr = self.parse_primary()?;
+            let is_percent = self.check_keyword("PERCENT");
+            if is_percent {
+                self.advance();
+            }
+            let with_ties = if self.check_keyword("WITH")
+                && self
+                    .peek_offset(1)
+                    .is_some_and(|t| t.value.eq_ignore_ascii_case("TIES"))
+            {
+                self.advance();
+                self.advance();
+                true
+            } else {
+                false
+            };
+            if is_percent || with_ties {
+                let mut suffix = String::new();
+                if is_percent {
+                    suffix.push_str(" PERCENT");
+                }
+                if with_ties {
+                    suffix.push_str(" WITH TIES");
+                }
+                expr = Expr::Number(format!("{}{}", expr.sql(), suffix));
+            }
+            Some(Box::new(expr))
         } else {
             None
         };
@@ -9038,8 +9065,8 @@ impl Parser {
                     self.advance();
 
                     // TRY_CAST / SAFE_CAST / TRY_TO_TIMESTAMP / … — same shape
-                    // as `CAST(expr AS type)`. Lower to `Expr::Cast` when the
-                    // body matches; fall back to ordinary function call when
+                    // as `CAST(expr AS type)`. Parse into `Expr::TryCast` when
+                    // the body matches; fall back to ordinary function call when
                     // it does not (e.g. comma-separated args).
                     if matches!(name.to_ascii_uppercase().as_str(), "TRY_CAST" | "SAFE_CAST") {
                         let save = self.pos;
@@ -9047,7 +9074,7 @@ impl Parser {
                         if self.match_token(TokenType::As) {
                             let dt = self.parse_data_type()?;
                             self.expect(TokenType::RParen)?;
-                            return Ok(Expr::Cast {
+                            return Ok(Expr::TryCast {
                                 expr: Box::new(inner),
                                 data_type: dt,
                             });
@@ -9422,7 +9449,7 @@ impl Parser {
                     )
                 {
                     // TRY_CAST / SAFE_CAST / TRY_TO_TIMESTAMP / … — same
-                    // shape as `CAST(expr AS type)`. Lower to `Expr::Cast`
+                    // shape as `CAST(expr AS type)`. Parse into `Expr::TryCast`
                     // (or back to a function call when the form doesn't
                     // match).
                     let upper = v.to_ascii_uppercase();
@@ -9433,7 +9460,7 @@ impl Parser {
                         if self.match_token(TokenType::As) {
                             let data_type = self.parse_data_type()?;
                             self.expect(TokenType::RParen)?;
-                            return Ok(Expr::Cast {
+                            return Ok(Expr::TryCast {
                                 expr: Box::new(inner),
                                 data_type,
                             });

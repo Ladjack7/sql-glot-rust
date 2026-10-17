@@ -677,6 +677,10 @@ fn transform_expr_plugin(expr: Expr, target: &DialectRef) -> Expr {
             expr: Box::new(transform_expr_plugin(*expr, target)),
             data_type: target.map_data_type(&data_type),
         },
+        Expr::TryCast { expr, data_type } => Expr::TryCast {
+            expr: Box::new(transform_expr_plugin(*expr, target)),
+            data_type: target.map_data_type(&data_type),
+        },
         Expr::ILike {
             expr,
             pattern,
