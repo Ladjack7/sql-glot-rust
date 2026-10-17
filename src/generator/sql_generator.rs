@@ -2400,6 +2400,25 @@ impl Generator {
                     }
                 }
 
+                // PSQ-4847 (OD5): Oracle rejects CLOB/NCLOB inside CAST (ORA-22849);
+                // emit TO_CLOB / TO_NCLOB instead so typed NULL / string LOB
+                // expressions succeed and preserve their LOB column type.
+                if matches!(self.dialect, Some(Dialect::Oracle)) {
+                    let lob_fn = match data_type {
+                        DataType::Unknown(s) if s.eq_ignore_ascii_case("CLOB") => Some("TO_CLOB("),
+                        DataType::Unknown(s) if s.eq_ignore_ascii_case("NCLOB") => {
+                            Some("TO_NCLOB(")
+                        }
+                        _ => None,
+                    };
+                    if let Some(fn_kw) = lob_fn {
+                        self.write_keyword(fn_kw);
+                        self.gen_expr(expr);
+                        self.write(")");
+                        return;
+                    }
+                }
+
                 let is_postgres = matches!(
                     self.dialect,
                     Some(
@@ -2770,6 +2789,13 @@ impl Generator {
             DateTimeField::Timezone => "TIMEZONE",
             DateTimeField::TimezoneHour => "TIMEZONE_HOUR",
             DateTimeField::TimezoneMinute => "TIMEZONE_MINUTE",
+            DateTimeField::YearToMonth => "YEAR TO MONTH",
+            DateTimeField::DayToHour => "DAY TO HOUR",
+            DateTimeField::DayToMinute => "DAY TO MINUTE",
+            DateTimeField::DayToSecond => "DAY TO SECOND",
+            DateTimeField::HourToMinute => "HOUR TO MINUTE",
+            DateTimeField::HourToSecond => "HOUR TO SECOND",
+            DateTimeField::MinuteToSecond => "MINUTE TO SECOND",
         };
         self.write(name);
     }
@@ -3479,7 +3505,7 @@ impl Generator {
 
             // ── JSON ───────────────────────────────────────────────────
             TypedFunction::JSONExtract { expr, path } => {
-                if is_tsql {
+                if is_tsql || is_oracle {
                     self.write_keyword("JSON_VALUE(");
                 } else {
                     self.write_keyword("JSON_EXTRACT(");
@@ -3492,7 +3518,7 @@ impl Generator {
             TypedFunction::JSONExtractScalar { expr, path } => {
                 if is_bigquery {
                     self.write_keyword("JSON_EXTRACT_SCALAR(");
-                } else if is_tsql {
+                } else if is_tsql || is_oracle {
                     self.write_keyword("JSON_VALUE(");
                 } else {
                     self.write_keyword("JSON_EXTRACT_SCALAR(");
