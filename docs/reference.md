@@ -1026,6 +1026,8 @@ pub enum AlterTableAction {
 | `ShiftRight` | `>>` |
 | `Arrow` | `->` |
 | `DoubleArrow` | `->>` |
+| `HashArrow` | `#>` |
+| `HashDoubleArrow` | `#>>` |
 
 ### UnaryOperator
 

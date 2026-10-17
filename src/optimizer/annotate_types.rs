@@ -712,8 +712,8 @@ fn infer_binary_op_type(
         },
 
         // JSON operators
-        Arrow => Some(DataType::Json),
-        DoubleArrow => Some(DataType::Text),
+        Arrow | HashArrow => Some(DataType::Json),
+        DoubleArrow | HashDoubleArrow => Some(DataType::Text),
     }
 }
 
