@@ -5316,3 +5316,26 @@ fn cr033_temporal_false_positive_controls() {
         Dialect::Snowflake,
     );
 }
+
+#[test]
+fn psq4850_tsql_top_percent_and_try_cast_preserved() {
+    validate_with_dialect(
+        "SELECT TOP 1 PERCENT customer_id FROM customers ORDER BY customer_id",
+        "SELECT TOP 1 PERCENT customer_id FROM customers ORDER BY customer_id",
+        Dialect::Postgres,
+        Dialect::Tsql,
+    );
+    validate_with_dialect(
+        "SELECT TOP (1) PERCENT customer_id FROM customers ORDER BY customer_id",
+        "SELECT TOP (1) PERCENT customer_id FROM customers ORDER BY customer_id",
+        Dialect::Postgres,
+        Dialect::Tsql,
+    );
+    validate_with_dialect(
+        "SELECT TRY_CAST('x' AS INT) AS a, TRY_CONVERT(INT, 'x') AS b",
+        "SELECT TRY_CAST('x' AS INT) AS a, TRY_CONVERT(INT, 'x') AS b",
+        Dialect::Postgres,
+        Dialect::Tsql,
+    );
+}
+
