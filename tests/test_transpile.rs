@@ -5150,6 +5150,44 @@ fn cr033_preserves_qualified_quoted_joined_and_nested_sources() {
 }
 
 #[test]
+fn psq4847_oracle_number_precision_json_value_interval_and_clob_casts() {
+    // OD1: NUMBER(p,s) and NUMBER(p) casts preserve precision and scale
+    validate_with_dialect(
+        "SELECT CAST(12.345 AS NUMBER(5,2)) AS a FROM DUAL",
+        "SELECT CAST(12.345 AS NUMBER(5, 2)) AS a FROM DUAL",
+        Dialect::Postgres,
+        Dialect::Oracle,
+    );
+    validate_with_dialect(
+        "SELECT CAST(99999 AS NUMBER(3)) AS a FROM DUAL",
+        "SELECT CAST(99999 AS NUMBER(3)) AS a FROM DUAL",
+        Dialect::Postgres,
+        Dialect::Oracle,
+    );
+    // OD3: JSON_VALUE preserved on Oracle (not rewritten to JSON_EXTRACT)
+    validate_with_dialect(
+        "SELECT JSON_VALUE('{\"a\":{\"b\":\"c\"}}', '$.a.b') AS j FROM DUAL",
+        "SELECT JSON_VALUE('{\"a\":{\"b\":\"c\"}}', '$.a.b') AS j FROM DUAL",
+        Dialect::Postgres,
+        Dialect::Oracle,
+    );
+    // OD4: INTERVAL YEAR TO MONTH preserves compound range unit
+    validate_with_dialect(
+        "SELECT INTERVAL '1-2' YEAR TO MONTH AS i FROM DUAL",
+        "SELECT INTERVAL '1-2' YEAR TO MONTH AS i FROM DUAL",
+        Dialect::Postgres,
+        Dialect::Oracle,
+    );
+    // OD5: CAST(NULL AS CLOB) lowers to TO_CLOB(NULL) on Oracle to avoid ORA-22849
+    validate_with_dialect(
+        "SELECT CAST(NULL AS CLOB) AS c FROM DUAL",
+        "SELECT TO_CLOB(NULL) AS c FROM DUAL",
+        Dialect::Postgres,
+        Dialect::Oracle,
+    );
+}
+
+#[test]
 fn cr033_rejects_malformed_temporal_clauses() {
     let malformed = [
         "SELECT * FROM t AT(OFFSET -60)",

@@ -688,6 +688,13 @@ pub enum DateTimeField {
     Timezone,
     TimezoneHour,
     TimezoneMinute,
+    YearToMonth,
+    DayToHour,
+    DayToMinute,
+    DayToSecond,
+    HourToMinute,
+    HourToSecond,
+    MinuteToSecond,
 }
 
 // ═══════════════════════════════════════════════════════════════════════

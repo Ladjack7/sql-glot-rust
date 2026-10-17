@@ -5961,6 +5961,20 @@ impl Parser {
                         let len = self.parse_oracle_str_len()?;
                         Ok(DataType::NVarchar2(len))
                     }
+                    "NUMBER" => {
+                        let (precision, scale) = self.parse_type_params()?;
+                        match (precision, scale) {
+                            (Some(p), Some(s)) => {
+                                Ok(DataType::Unknown(format!("NUMBER({p}, {s})")))
+                            }
+                            (Some(p), None) => Ok(DataType::Unknown(format!("NUMBER({p})"))),
+                            _ => Ok(DataType::Unknown("NUMBER".to_string())),
+                        }
+                    }
+                    "DEC" | "FIXED" => {
+                        let (precision, scale) = self.parse_type_params()?;
+                        Ok(DataType::Decimal { precision, scale })
+                    }
                     "BINARY" => {
                         let len = self.parse_single_type_param()?;
                         Ok(DataType::Binary(len))
@@ -8599,14 +8613,53 @@ impl Parser {
                 // expression instead of a single primary so the trailing
                 // unit keyword is reached cleanly.
                 let value = self.parse_addition()?;
-                let unit = self.try_parse_datetime_field();
-                // ANSI / Spark composite ranges: `INTERVAL '0-0' YEAR TO MONTH`,
-                // `INTERVAL '15:40' HOUR TO MINUTE` etc. Swallow the trailing
-                // `TO <unit>` clause; we keep only the leading unit.
+                let mut unit = self.try_parse_datetime_field();
+                // Optional leading unit precision: `INTERVAL '1-2' YEAR(2) TO MONTH`
+                if self.peek_type() == &TokenType::LParen
+                    && self
+                        .peek_offset(1)
+                        .map(|t| matches!(t.token_type, TokenType::Number))
+                        .unwrap_or(false)
+                    && self
+                        .peek_offset(2)
+                        .map(|t| matches!(t.token_type, TokenType::RParen))
+                        .unwrap_or(false)
+                {
+                    self.advance();
+                    self.advance();
+                    self.advance();
+                }
+                // ANSI / Oracle / Spark composite ranges: `INTERVAL '1-2' YEAR TO MONTH`,
+                // `INTERVAL '15:40' HOUR TO MINUTE` etc. Preserve the compound range unit.
                 if self.check_keyword("TO") {
                     let saved = self.pos;
                     self.advance();
-                    if self.try_parse_datetime_field().is_none() {
+                    if let Some(to_unit) = self.try_parse_datetime_field() {
+                        unit = match (unit, to_unit) {
+                            (Some(DateTimeField::Year), DateTimeField::Month) => {
+                                Some(DateTimeField::YearToMonth)
+                            }
+                            (Some(DateTimeField::Day), DateTimeField::Hour) => {
+                                Some(DateTimeField::DayToHour)
+                            }
+                            (Some(DateTimeField::Day), DateTimeField::Minute) => {
+                                Some(DateTimeField::DayToMinute)
+                            }
+                            (Some(DateTimeField::Day), DateTimeField::Second) => {
+                                Some(DateTimeField::DayToSecond)
+                            }
+                            (Some(DateTimeField::Hour), DateTimeField::Minute) => {
+                                Some(DateTimeField::HourToMinute)
+                            }
+                            (Some(DateTimeField::Hour), DateTimeField::Second) => {
+                                Some(DateTimeField::HourToSecond)
+                            }
+                            (Some(DateTimeField::Minute), DateTimeField::Second) => {
+                                Some(DateTimeField::MinuteToSecond)
+                            }
+                            (u, _) => u,
+                        };
+                    } else {
                         self.pos = saved;
                     }
                 }
