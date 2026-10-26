@@ -1780,8 +1780,8 @@ impl Parser {
         let group_by = if self.match_token(TokenType::Group) {
             self.expect(TokenType::By)?;
             let items = self.parse_group_by_list()?;
-            // Unmodeled ClickHouse / MySQL GROUP BY modifiers
-            // Leave WITH [NO] DATA for the enclosing CTAS parser
+            // Consume only the known GROUP BY modifiers here so CTAS can read
+            // WITH [NO] DATA
             if self.peek_type() == &TokenType::With
                 && self.peek_offset(1).is_some_and(|token| {
                     matches!(token.token_type, TokenType::Rollup | TokenType::Cube)

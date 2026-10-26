@@ -19,6 +19,39 @@ fn assert_ctas(sql: &str, query: &str, dialect: Dialect) -> Statement {
     statement
 }
 
+fn assert_group_by_modifier_keeps_following_clauses(modifier: &str, dialect: Dialect) {
+    use sqlglot_rust::ast::{BinaryOperator, Expr, OrderByItem, QuoteStyle};
+
+    let sql =
+        format!("SELECT id FROM t GROUP BY id WITH {modifier} HAVING id > 0 ORDER BY id DESC");
+    let Statement::Select(query) = parse(&sql, dialect).unwrap() else {
+        panic!("expected SELECT");
+    };
+    let column = Expr::Column {
+        table: None,
+        name: "id".into(),
+        quote_style: QuoteStyle::None,
+        table_quote_style: QuoteStyle::None,
+    };
+    assert_eq!(query.group_by, vec![column.clone()]);
+    assert_eq!(
+        query.having,
+        Some(Expr::BinaryOp {
+            left: Box::new(column.clone()),
+            op: BinaryOperator::Gt,
+            right: Box::new(Expr::Number("0".into())),
+        })
+    );
+    assert_eq!(
+        query.order_by,
+        vec![OrderByItem {
+            expr: column,
+            ascending: false,
+            nulls_first: None,
+        }]
+    );
+}
+
 mod ansi {
     use super::*;
 
@@ -386,6 +419,30 @@ mod athena {
         };
         assert_eq!(table.with_data, Some(false));
         assert!(matches!(statements[1], Statement::Select(_)));
+    }
+}
+
+mod clickhouse {
+    use super::*;
+
+    // GROUP BY modifiers
+
+    #[test]
+    fn group_by_modifiers_keep_following_clauses() {
+        for modifier in ["CUBE", "TOTALS"] {
+            assert_group_by_modifier_keeps_following_clauses(modifier, Dialect::ClickHouse);
+        }
+    }
+}
+
+mod mysql {
+    use super::*;
+
+    // GROUP BY modifiers
+
+    #[test]
+    fn rollup_keeps_following_clauses() {
+        assert_group_by_modifier_keeps_following_clauses("ROLLUP", Dialect::Mysql);
     }
 }
 

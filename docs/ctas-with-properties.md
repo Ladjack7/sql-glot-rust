@@ -28,9 +28,9 @@ WITH NO DATA
 
 Properties use `name = expression` syntax. For CTAS with properties, the query
 must parse as `Statement::Select` or `Statement::SetOperation`. The same check
-applies when the parser records an explicit `WITH [NO] DATA` clause. Other
-query forms, or unsupported clauses such as `OR REPLACE`, make the parser
-return the full statement as `Statement::Command`.
+applies when the parser records an explicit `WITH [NO] DATA` clause. For those
+statements, other query forms or unsupported clauses such as `OR REPLACE`
+make the parser return the full statement as `Statement::Command`.
 
 ## SQL generation
 
