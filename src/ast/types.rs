@@ -71,6 +71,10 @@ impl QuoteStyle {
 ///
 /// Corresponds to the top-level node in sqlglot's expression tree.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Keep the public AST variant payloads source compatible; boxing is a separate API redesign"
+)]
 pub enum Statement {
     Select(SelectStatement),
     Insert(InsertStatement),
@@ -90,7 +94,7 @@ pub enum Statement {
     Truncate(TruncateStatement),
     /// BEGIN / COMMIT / ROLLBACK
     Transaction(TransactionStatement),
-    /// EXPLAIN <statement>
+    /// `EXPLAIN <statement>`
     Explain(ExplainStatement),
     /// USE database
     Use(UseStatement),
@@ -206,6 +210,10 @@ pub enum SetOperationType {
 
 /// An item in a SELECT list.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Keep the public SelectItem::Expr payload source compatible"
+)]
 pub enum SelectItem {
     /// `*`
     Wildcard,
@@ -1712,7 +1720,7 @@ pub struct MergeStatement {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MergeClause {
     pub kind: MergeClauseKind,
-    /// Optional additional condition: WHEN MATCHED AND <condition>
+    /// Optional additional condition: `WHEN MATCHED AND <condition>`
     pub condition: Option<Expr>,
     pub action: MergeAction,
 }

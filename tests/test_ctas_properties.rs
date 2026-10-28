@@ -545,6 +545,107 @@ mod trino {
 mod integration {
     use super::*;
 
+    #[test]
+    fn unmodeled_query_clauses_preserve_the_complete_ctas() {
+        for (dialect, sql) in [
+            (
+                Dialect::Postgres,
+                "CREATE TABLE x WITH (fillfactor = 70) AS SELECT DISTINCT ON (id) id, value FROM t ORDER BY id, value DESC",
+            ),
+            (
+                Dialect::Trino,
+                "CREATE TABLE x WITH (format = 'ORC') AS SELECT id FROM t ORDER BY id FETCH FIRST 1 ROWS WITH TIES",
+            ),
+            (
+                Dialect::Trino,
+                "CREATE TABLE x WITH (format = 'ORC') AS SELECT id FROM t TABLESAMPLE BERNOULLI (10)",
+            ),
+            (
+                Dialect::Postgres,
+                "CREATE TABLE x AS SELECT DISTINCT ON (id) id FROM t WITH NO DATA",
+            ),
+            (
+                Dialect::DuckDb,
+                "CREATE TABLE x WITH (format = 'ORC') AS SELECT * EXCLUDE (secret) FROM t",
+            ),
+            (
+                Dialect::DuckDb,
+                "CREATE TABLE x WITH (format = 'ORC') AS SELECT a FROM t UNION BY NAME SELECT b FROM u",
+            ),
+            (
+                Dialect::Mysql,
+                "CREATE TABLE x AS SELECT id FROM t GROUP BY id WITH ROLLUP",
+            ),
+        ] {
+            let statement = parse(sql, dialect).unwrap();
+            assert!(
+                matches!(statement, Statement::Command(_)),
+                "{sql}: {statement:?}"
+            );
+            assert_eq!(generate(&statement, dialect), sql);
+            assert_eq!(sqlglot_rust::transpile(sql, dialect, dialect).unwrap(), sql);
+        }
+    }
+
+    #[test]
+    fn nested_unmodeled_clauses_preserve_the_complete_ctas() {
+        for query in [
+            "WITH c AS (SELECT DISTINCT ON (id) id FROM t) SELECT id FROM c",
+            "SELECT id FROM (SELECT DISTINCT ON (id) id FROM t) AS c",
+            "SELECT id FROM t UNION ALL SELECT DISTINCT ON (id) id FROM u",
+            "SELECT id FROM t WHERE id IN (SELECT DISTINCT ON (id) id FROM u)",
+        ] {
+            let sql = format!("CREATE TABLE x WITH (fillfactor = 70) AS {query}");
+            let statement = parse(&sql, Dialect::Postgres).unwrap();
+            assert!(matches!(statement, Statement::Command(_)), "{sql}");
+            assert_eq!(generate(&statement, Dialect::Postgres), sql);
+        }
+    }
+
+    #[test]
+    fn unmodeled_syntax_does_not_poison_the_next_ctas() {
+        let sql = "CREATE TABLE x WITH (fillfactor = 70) AS SELECT DISTINCT ON (id) id FROM t; CREATE TABLE y WITH (fillfactor = 70) AS SELECT id FROM t WITH NO DATA";
+        let statements = sqlglot_rust::parser::parse_statements(sql, Dialect::Postgres).unwrap();
+        assert_eq!(statements.len(), 2);
+        assert!(matches!(statements[0], Statement::Command(_)));
+        assert!(
+            matches!(&statements[1], Statement::CreateTable(table) if table.with_data == Some(false))
+        );
+    }
+
+    #[test]
+    fn ctas_query_changes_are_visible_in_ast_diff() {
+        use sqlglot_rust::diff::{ChangeAction, diff};
+        for (before_query, after_query) in [
+            ("SELECT a FROM t", "SELECT b FROM t"),
+            ("SELECT a FROM t", "SELECT a FROM other"),
+            ("SELECT a FROM t WHERE tenant_id = 1", "SELECT a FROM t"),
+            (
+                "SELECT a FROM t UNION ALL SELECT a FROM u",
+                "SELECT a FROM t UNION ALL SELECT b FROM u",
+            ),
+        ] {
+            for properties in ["", " WITH (format = 'ORC')"] {
+                let before = parse(
+                    &format!("CREATE TABLE x{properties} AS {before_query}"),
+                    Dialect::Athena,
+                )
+                .unwrap();
+                let after = parse(
+                    &format!("CREATE TABLE x{properties} AS {after_query}"),
+                    Dialect::Athena,
+                )
+                .unwrap();
+                assert!(
+                    diff(&before, &after)
+                        .iter()
+                        .any(|change| matches!(change, ChangeAction::Update(_, _)))
+                );
+                assert!(diff(&before, &before).is_empty());
+            }
+        }
+    }
+
     // Statement streams
 
     #[test]
